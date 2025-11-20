@@ -3,6 +3,7 @@
 
 // c++ headers ------------------------------------------
 #include <cstring>
+#include <cmath>
 
 #include <memory>
 #include <utility>
@@ -82,6 +83,10 @@ Matrix44 Matrix44::Transpose() const {
   return result;
 }
 
+bool Matrix44::Invert(Matrix44& out_result) const {
+  return InvertMat44(out_result.data.data(), this->data.data());
+}
+
 Matrix44 Matrix44::operator*(float scalar) const {
   Matrix44 result;
   for (size_t i = 0; i < 16; ++i) {
@@ -93,6 +98,12 @@ Matrix44 Matrix44::operator*(float scalar) const {
 Matrix44 Matrix44::operator*(Matrix44 const& other) const {
   Matrix44 result;
   MulMat44(result.data.data(), this->data.data(), other.data.data());
+  return result;
+}
+
+Vector4 operator*(Matrix44 const& mat, Vector4 const& vec) {
+  Vector4 result;
+  MulMat44Vec4(result.Data(), mat.data.data(), vec.Data());
   return result;
 }
 
@@ -157,6 +168,17 @@ void MulMat33Vec3(
   dst[2] = mat[2] * vec[0] + mat[5] * vec[1] + mat[8] * vec[2];
 }
 
+void MulMat44Vec4(
+  float* MBASE_NOT_NULL dst,
+  float const* MBASE_NOT_NULL mat,
+  float const* MBASE_NOT_NULL vec
+) {
+  dst[0] = mat[0] * vec[0] + mat[4] * vec[1] + mat[8]  * vec[2] + mat[12] * vec[3];
+  dst[1] = mat[1] * vec[0] + mat[5] * vec[1] + mat[9]  * vec[2] + mat[13] * vec[3];
+  dst[2] = mat[2] * vec[0] + mat[6] * vec[1] + mat[10] * vec[2] + mat[14] * vec[3];
+  dst[3] = mat[3] * vec[0] + mat[7] * vec[1] + mat[11] * vec[2] + mat[15] * vec[3];
+}
+
 void MulMat33(
   float* MBASE_NOT_NULL dst,
   float const* MBASE_NOT_NULL a,
@@ -212,27 +234,112 @@ bool InvertMat33(
   float* MBASE_NOT_NULL dst,
   float const* MBASE_NOT_NULL src
 ) {
-  float const det =
-    src[0] * (src[4] * src[8] - src[7] * src[5]) -
-    src[3] * (src[1] * src[8] - src[7] * src[2]) +
-    src[6] * (src[1] * src[5] - src[4] * src[2]);
-  if (det == 0.0f) {
-    return false; // Non-invertible matrix
+  // Prevent accidental in-place usage
+  float tmp[9];
+  if (dst == src) {
+    std::memcpy(tmp, src, sizeof(tmp));
+    src = tmp;
   }
 
-  float const inv_det = 1.0f / det;
+  // Precompute minors (2x2 determinants)
+  float m00 = src[4] * src[8] - src[5] * src[7];
+  float m01 = src[3] * src[8] - src[5] * src[6];
+  float m02 = src[3] * src[7] - src[4] * src[6];
+  float m10 = src[1] * src[8] - src[2] * src[7];
+  float m11 = src[0] * src[8] - src[2] * src[6];
+  float m12 = src[0] * src[7] - src[1] * src[6];
+  float m20 = src[1] * src[5] - src[2] * src[4];
+  float m21 = src[0] * src[5] - src[2] * src[3];
+  float m22 = src[0] * src[4] - src[1] * src[3];
 
-  // Compute the inverse using the formula for the inverse of a 3x3 matrix
-  dst[0] =  (src[4] * src[8] - src[5] * src[7]) * inv_det;
-  dst[1] = -(src[1] * src[8] - src[2] * src[7]) * inv_det;
-  dst[2] =  (src[1] * src[5] - src[2] * src[4]) * inv_det;
-  dst[3] = -(src[3] * src[8] - src[5] * src[6]) * inv_det;
-  dst[4] =  (src[0] * src[8] - src[2] * src[6]) * inv_det;
-  dst[5] = -(src[0] * src[5] - src[2] * src[3]) * inv_det;
-  dst[6] =  (src[3] * src[7] - src[4] * src[6]) * inv_det;
-  dst[7] = -(src[0] * src[7] - src[1] * src[6]) * inv_det;
+  float const det =
+    src[0] * m00 -
+    src[3] * m10 +
+    src[6] * m20;
 
-  dst[8] =  (src[0] * src[4] - src[1] * src[3]) * inv_det;
+  constexpr float eps = 1e-8f;
+  if (std::fabs(det) < eps) {
+    return false;
+  }
+
+  float inv_det = 1.0f / det;
+
+  // Cofactor matrix transposed directly into column-major inverse
+  dst[0] =  m00 * inv_det;
+  dst[1] = -m10 * inv_det;
+  dst[2] =  m20 * inv_det;
+
+  dst[3] = -m01 * inv_det;
+  dst[4] =  m11 * inv_det;
+  dst[5] = -m21 * inv_det;
+
+  dst[6] =  m02 * inv_det;
+  dst[7] = -m12 * inv_det;
+  dst[8] =  m22 * inv_det;
+
+  return true;
+}
+
+bool InvertMat44(
+  float* MBASE_NOT_NULL dst,
+  float const* MBASE_NOT_NULL src
+) {
+  // Convert column-major src to row-major augmented [A | I]
+  float m[4 * 8]; // 4 rows, 8 columns
+  for (int r = 0; r < 4; ++r) {
+    for (int c = 0; c < 4; ++c) {
+      m[r * 8 + c] = src[c * 4 + r]; // src(col-major) -> row-major
+    }
+    for (int c = 0; c < 4; ++c) {
+      m[r * 8 + 4 + c] = (r == c) ? 1.0f : 0.0f;
+    }
+  }
+
+  // Gauss-Jordan with partial pivoting
+  for (int col = 0; col < 4; ++col) {
+    // Find pivot row
+    int pivotRow = col;
+    float maxAbs = std::fabs(m[pivotRow * 8 + col]);
+    for (int r = col + 1; r < 4; ++r) {
+      float v = std::fabs(m[r * 8 + col]);
+      if (v > maxAbs) {
+        maxAbs = v;
+        pivotRow = r;
+      }
+    }
+    if (maxAbs < 1e-8f) {
+      return false; // Singular (or near-singular)
+    }
+    // Swap pivot row
+    if (pivotRow != col) {
+      for (int k = 0; k < 8; ++k) {
+        std::swap(m[col * 8 + k], m[pivotRow * 8 + k]);
+      }
+    }
+    // Normalize pivot row
+    float pivot = m[col * 8 + col];
+    float invPivot = 1.0f / pivot;
+    for (int k = 0; k < 8; ++k) {
+      m[col * 8 + k] *= invPivot;
+    }
+    // Eliminate other rows
+    for (int r = 0; r < 4; ++r) {
+      if (r == col) continue;
+      float factor = m[r * 8 + col];
+      if (factor != 0.0f) {
+        for (int k = 0; k < 8; ++k) {
+          m[r * 8 + k] -= factor * m[col * 8 + k];
+        }
+      }
+    }
+  }
+
+  // Extract inverse: convert back to column-major
+  for (int r = 0; r < 4; ++r) {
+    for (int c = 0; c < 4; ++c) {
+      dst[c * 4 + r] = m[r * 8 + 4 + c];
+    }
+  }
   return true;
 }
 

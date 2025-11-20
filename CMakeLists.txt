@@ -37,6 +37,7 @@ endif()
 
 set(HEADERS_MMATH_PUBLIC_DIR "${SRC_DIR}/mmath/public")
 set(HEADERS_MMATH_PUBLIC
+  ${HEADERS_MMATH_PUBLIC_DIR}/coldet.h
   ${HEADERS_MMATH_PUBLIC_DIR}/geometry.h
   ${HEADERS_MMATH_PUBLIC_DIR}/matrix.h
   ${HEADERS_MMATH_PUBLIC_DIR}/projection.h
@@ -47,6 +48,7 @@ source_group("Public" FILES ${HEADERS_MMATH_PUBLIC})
 
 set(SOURCES_MMATH_PRIVATE_DIR "${SRC_DIR}/mmath/private")
 set(SOURCES_MMATH_PRIVATE
+  ${SOURCES_MMATH_PRIVATE_DIR}/coldet.cpp
   ${SOURCES_MMATH_PRIVATE_DIR}/geometry.cpp
   ${SOURCES_MMATH_PRIVATE_DIR}/matrix.cpp
   ${SOURCES_MMATH_PRIVATE_DIR}/projection.cpp

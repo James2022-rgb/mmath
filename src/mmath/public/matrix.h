@@ -116,9 +116,12 @@ struct Matrix44 final {
   }
 
   Matrix44 Transpose() const;
+  bool Invert(Matrix44& out_result) const;
 
   Matrix44 operator*(float scalar) const;
   Matrix44 operator*(Matrix44 const& other) const;
+
+  friend Vector4 operator*(Matrix44 const& mat, Vector4 const& vec);
 };
 
 static_assert(sizeof(Matrix44) == 16 * sizeof(float));
@@ -154,6 +157,12 @@ void MulMat33Vec3(
   float const* MBASE_NOT_NULL vec
 );
 
+void MulMat44Vec4(
+  float* MBASE_NOT_NULL dst,
+  float const* MBASE_NOT_NULL mat,
+  float const* MBASE_NOT_NULL vec
+);
+
 /// ## Parameters
 /// - `dst`: Pointer to the destination matrix (9 floats).
 /// - `a`: Pointer to the first source matrix (9 floats).
@@ -175,6 +184,11 @@ void MulMat44(
 );
 
 bool InvertMat33(
+  float* MBASE_NOT_NULL dst,
+  float const* MBASE_NOT_NULL src
+);
+
+bool InvertMat44(
   float* MBASE_NOT_NULL dst,
   float const* MBASE_NOT_NULL src
 );
